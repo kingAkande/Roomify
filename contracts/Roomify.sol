@@ -1,116 +1,184 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-contract HotelManagement {
-    // Struct to store room details
+
+contract Hotelmgt {
+
+    uint8 roomNumber;
+    address owner;
+
+    constructor(){
+        owner = msg.sender;
+    }
+
     struct Room {
-        uint id;
-        uint price;
-        string roomType;
-        bool isAvailable;
+
+    uint8 id;
+    uint256 price;
+    string roomType;
+    bool isAvailable;
+
     }
 
-    // Struct to store booking details
     struct Booking {
-        address user;
-        uint checkInDate;
-        uint checkOutDate;
-        bool isActive;
+    address user;
+    uint256 amount;
+    string checkInDate;
+    string checkOutDate;
+    bool isActive;
+
+}
+
+
+    enum RoomStandard{
+        basic,
+        standard,
+        premium
     }
 
-    // Mapping to store rooms by room ID
-    mapping(uint => Room) public rooms;
+    //RoomStandard standard;
 
-    // Nested mapping to store bookings by room ID and user address
-    mapping(uint => mapping(address => Booking)) public bookings;
+    modifier onlyOwner(){
 
-    // Array to store booking history
-    Booking[] public bookingHistory;
-
-    // Address of the contract owner (hotel owner)
-    address public hotelOwner;
-
-    // Events to log actions
-    event RoomAdded(uint roomId, uint price, string roomType);
-    event RoomUpdated(uint roomId, uint newPrice, string newRoomType);
-    event RoomBooked(uint roomId, address user, uint checkInDate, uint checkOutDate);
-    event BookingCancelled(uint roomId, address user);
-    event PaymentReceived(uint roomId, address user, uint amount);
-    
-    constructor() {
-        hotelOwner = msg.sender;
-    }
-
-    // Modifier to restrict functions to the hotel owner
-    modifier onlyOwner() {
-        require(msg.sender == hotelOwner, "Not the hotel owner");
+        require(msg.sender == owner , "not owner");
         _;
     }
 
-    // Function to add a room
-    function addRoom(uint roomId, uint price, string memory roomType) public onlyOwner {
-        rooms[roomId] = Room(roomId, price, roomType, true);
-        emit RoomAdded(roomId, price, roomType);
-    }
+    mapping (uint => Room) roomInfo; 
+    mapping (uint => bool) booked;
+    mapping(uint => mapping(address => Booking)) public bookings;
 
-    // Function to update room details
-    function updateRoom(uint roomId, uint newPrice, string memory newRoomType) public onlyOwner {
-        Room storage room = rooms[roomId];
-        room.price = newPrice;
-        room.roomType = newRoomType;
-        emit RoomUpdated(roomId, newPrice, newRoomType);
-    }
 
-    // Function to check if a room is available for a given date range
-    function isRoomAvailable(uint roomId, uint checkIn, uint checkOut) public view returns (bool) {
-        Room memory room = rooms[roomId];
-        if (!room.isAvailable) {
-            return false;
+    uint[]private roomIds;
+    mapping(uint => address[])private usersPerRoom;
+
+    function createRoom(RoomStandard _standard ) external onlyOwner {
+
+        require(msg.sender != address(0), "Zero Address");
+
+        uint8 _id = roomNumber+1;
+
+        Room storage rooM = roomInfo[_id];
+
+        rooM.id = _id;
+        rooM.isAvailable = true;
+    
+
+        if(_standard == RoomStandard.basic){
+            roomInfo[_id].price= 1000;
+            rooM.roomType = "Basic";
+        }else if (_standard == RoomStandard.standard){
+            roomInfo[_id].price = 2000;
+             rooM.roomType = "Standard";
+        } else {
+          roomInfo[_id].price= 3000;
+          rooM.roomType = "Premium";
         }
 
-        // Check against all past bookings for that room
-        for (uint i = 0; i < bookingHistory.length; i++) {
-            Booking memory booking = bookingHistory[i];
-            if (booking.isActive && 
-                booking.checkInDate < checkOut && 
-                booking.checkOutDate > checkIn) {
-                return false; // Overlapping booking found
+        roomNumber++;
+        roomIds.push(_id);
+
+    }
+
+
+    function getCreatedRooms(uint8 _id)external onlyOwner view returns (Room memory)  {
+        require(_id >0 && _id<= roomNumber , "ID is invalid");
+        return roomInfo[_id];
+    }
+
+    function getAllRooms() external onlyOwner view returns (Room[] memory) {
+    
+    Room[] memory rooms = new Room[](roomNumber);
+    for (uint8 i = 1; i <= roomNumber; i++) {
+        rooms[i - 1] = roomInfo[i];
+    }
+    return rooms;
+}
+
+
+    function bookRoom(uint256 _id,  string memory _checkInDate,  string memory _checkOutDate )external payable  {
+        
+        require(msg.sender != address(0), "Zero Address");
+
+        require(msg.value >= roomInfo[_id].price, "insufficient Amount");
+
+        require(roomInfo[_id].isAvailable , "not available");
+        require(!booked[_id], "Room Already booked");
+      
+
+        Booking storage bK = bookings[_id][msg.sender];
+        bK.user = msg.sender;
+        bK.amount = msg.value;
+        bK.checkInDate = _checkInDate;
+        bK.checkOutDate = _checkOutDate;
+        bK.isActive = true;
+
+      
+
+        booked[_id] = true;
+        roomInfo[_id].isAvailable = false;
+        usersPerRoom[_id].push(msg.sender); 
+
+    }
+
+
+
+    function getAllBookings() external onlyOwner view returns (Booking[] memory) {
+
+        uint totalBookings = 0;
+
+        // First, calculate how many bookings exist
+        for (uint i = 0; i < roomIds.length; i++) {
+            uint roomId = roomIds[i];
+            totalBookings += usersPerRoom[roomId].length;
+        }
+
+        // Create an array to hold all bookings
+        Booking[] memory allBookings = new Booking[](totalBookings);
+        uint bookingIndex = 0;
+
+        // Now, iterate through rooms and users to gather all bookings
+        for (uint i = 0; i < roomIds.length; i++) {
+            uint roomId = roomIds[i];
+            address[] memory users = usersPerRoom[roomId];
+
+        for (uint j = 0; j < users.length; j++) {
+                address user = users[j];
+                Booking memory booking = bookings[roomId][user];
+                allBookings[bookingIndex] = booking;
+                bookingIndex++;
             }
         }
-        return true; // Room is available
+
+        return allBookings;
     }
 
-    // Function to book a room
-    function bookRoom(uint roomId, uint checkIn, uint checkOut) public payable {
-        require(rooms[roomId].isAvailable, "Room is not available");
-        require(isRoomAvailable(roomId, checkIn, checkOut), "Room is already booked for this period");
-        require(msg.value >= rooms[roomId].price, "Insufficient payment");
 
-        bookings[roomId][msg.sender] = Booking(msg.sender, checkIn, checkOut, true);
-        bookingHistory.push(Booking(msg.sender, checkIn, checkOut, true));
+    
+ 
+    function cancelBooking(uint _id)external payable  {
+
+        require(msg.sender != address(0), "Zero Address");
+
+        require(bookings[_id][msg.sender].isActive,"No bookings");
+
+        require(bookings[_id][msg.sender].amount > 0, "Zero amount");
+
+        bookings[_id][msg.sender].isActive = false;
+
+        roomInfo[_id].isAvailable = true;
+
+        booked[_id] = false;
+
+    
+        payable(msg.sender).transfer(bookings[_id][msg.sender].amount);
+
+        bookings[_id][msg.sender].amount = 0;
+
         
-        emit RoomBooked(roomId, msg.sender, checkIn, checkOut);
-        emit PaymentReceived(roomId, msg.sender, msg.value);
     }
 
-    // Function to cancel a booking
-    function cancelBooking(uint roomId) public {
-        Booking storage booking = bookings[roomId][msg.sender];
-        require(booking.isActive, "No active booking found");
 
-        booking.isActive = false;
-        rooms[roomId].isAvailable = true;
-
-        // Refund the user
-        payable(msg.sender).transfer(rooms[roomId].price);
-
-        emit BookingCancelled(roomId, msg.sender);
-    }
-
-    // Function to withdraw funds by the hotel owner
-    function withdrawFunds() public onlyOwner {
-        uint balance = address(this).balance;
-        require(balance > 0, "No funds to withdraw");
-        payable(hotelOwner).transfer(balance);
-    }
 }
+
+
