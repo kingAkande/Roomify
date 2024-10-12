@@ -29,14 +29,22 @@ contract Hotelmgt {
 
 }
 
-
+    //RoomStandard standard;
     enum RoomStandard{
         basic,
         standard,
         premium
     }
 
-    //RoomStandard standard;
+
+    error ZERO_ADDRESS();
+    error INSUFFIENT_AMOUNT();
+    error NOT_AVAILABLE();
+    error ROOM_BOOKED();
+
+
+
+    
 
     modifier onlyOwner(){
 
@@ -54,7 +62,9 @@ contract Hotelmgt {
 
     function createRoom(RoomStandard _standard ) external onlyOwner {
 
-        require(msg.sender != address(0), "Zero Address");
+      if(msg.sender == address(0)){
+            revert ZERO_ADDRESS();
+        }
 
         uint8 _id = roomNumber+1;
 
@@ -98,12 +108,22 @@ contract Hotelmgt {
 
     function bookRoom(uint256 _id,  string memory _checkInDate,  string memory _checkOutDate )external payable  {
         
-        require(msg.sender != address(0), "Zero Address");
+        if(msg.sender == address(0)){
+            revert ZERO_ADDRESS();
+        }
 
-        require(msg.value >= roomInfo[_id].price, "insufficient Amount");
+        if(msg.value < roomInfo[_id].price){
+            revert INSUFFIENT_AMOUNT();
+        }
 
-        require(roomInfo[_id].isAvailable , "not available");
-        require(!booked[_id], "Room Already booked");
+       if (!roomInfo[_id].isAvailable){
+            revert NOT_AVAILABLE();
+       }
+
+        if(booked[_id]){
+            revert ROOM_BOOKED();
+        }
+    
       
 
         Booking storage bK = bookings[_id][msg.sender];
@@ -158,7 +178,9 @@ contract Hotelmgt {
  
     function cancelBooking(uint _id)external payable  {
 
-        require(msg.sender != address(0), "Zero Address");
+         if(msg.sender == address(0)){
+            revert ZERO_ADDRESS();
+        }
 
         require(bookings[_id][msg.sender].isActive,"No bookings");
 
